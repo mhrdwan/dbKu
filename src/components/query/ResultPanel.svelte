@@ -2,6 +2,7 @@
   import { CircleAlert, CircleCheck, LoaderCircle, TriangleAlert } from "@lucide/svelte";
   import type { ExecOutcome, SortSpec } from "../../lib/types";
   import { formatMs, plural } from "../../lib/util/format";
+  import ColumnJump from "../grid/ColumnJump.svelte";
   import DataGrid from "../grid/DataGrid.svelte";
   import ExportButton from "../grid/ExportButton.svelte";
 
@@ -17,6 +18,7 @@
   let sort = $state<SortSpec[]>([]);
   // Column positions for `sort` (names can repeat, e.g. SELECT a.id, b.id).
   let sortIndex = $state<number[]>([]);
+  let grid = $state<ReturnType<typeof DataGrid>>();
 
   const grids = $derived((outcome?.results ?? []).map((r, i) => ({ r, i })).filter(({ r }) => r.columns.length > 0));
 
@@ -88,6 +90,7 @@
           <span>{plural(current.rows.length, "row")}</span>
         {/if}
         <span>{formatMs(current.elapsedMs)}</span>
+        <ColumnJump columns={current.columns} onpick={(c) => grid?.revealColumn(c)} />
         <ExportButton name="result" columns={current.columns.map((c) => c.name)} rows={sortedRows} />
       {:else if outcome}
         <span>{formatMs(outcome.elapsedMs)}</span>
@@ -134,6 +137,7 @@
       </div>
     {:else if current}
       <DataGrid
+        bind:this={grid}
         columns={current.columns}
         rows={sortedRows}
         {sort}

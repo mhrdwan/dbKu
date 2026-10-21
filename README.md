@@ -65,6 +65,7 @@
   tables and views) that loads lazily and filters as you type.
 - Table browser with server-side paging, multi-column sorting (shift-click), a free `WHERE`
   filter and a "search all columns" box. Right-click a cell to filter by its value.
+- Jump to a column by name (`⌘J`) in wide tables and query results.
 - Structure (columns, keys, indexes) and DDL view for every table and view.
 - Command palette (`⌘K` / `Ctrl+K`) to jump to any table in any open connection.
 
@@ -158,6 +159,8 @@ On Windows and Linux, use `Ctrl` where macOS uses `⌘`.
 | `⌘T` | New query tab |
 | `⌘↵` | Run the selection, or the whole script |
 | `⌘S` | Save the query (query tab) / review and save edits (table tab) |
+| `⌘F` | Search the rows of the open table |
+| `⌘J` | Jump to a column by name (table tab) |
 | `⇧⌘F` | Find in database |
 | `⌘R` | Refresh table data |
 | `⌘W` | Close tab |

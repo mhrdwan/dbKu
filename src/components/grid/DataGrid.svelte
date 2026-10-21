@@ -50,6 +50,7 @@
   const ROW = 26;
   const HEAD = 42;
   const OVERSCAN = 8;
+  const FLASH_MS = 1600;
 
   let scroller = $state<HTMLDivElement>();
   let scrollTop = $state(0);
@@ -62,6 +63,9 @@
   // so opening and leaving a NULL cell does not turn it into ''.
   let editing = $state<{ r: number; c: number; value: string; opened: string; typed: boolean } | null>(null);
   let viewer = $state<{ r: number; c: number } | null>(null);
+  // Column briefly highlighted after "Jump to column".
+  let flash = $state<number | null>(null);
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
   const total = $derived(rows.length + edits.inserts.length);
   const numeric = $derived(columns.map((c) => isNumericType(c.typeName)));
@@ -102,6 +106,19 @@
     ro.observe(scroller);
     return () => ro.disconnect();
   });
+
+  $effect(() => () => clearTimeout(flashTimer));
+
+  /** Scroll column `c` to the left edge, move the active cell to it and flash it. */
+  export function revealColumn(c: number) {
+    if (c < 0 || c >= columns.length) return;
+    if (total > 0) active = { r: active?.r ?? 0, c };
+    if (scroller) scroller.scrollLeft = offsets[c] ?? 0;
+    clearTimeout(flashTimer);
+    flash = c;
+    flashTimer = setTimeout(() => (flash = null), FLASH_MS);
+    scroller?.focus();
+  }
 
   function isInserted(r: number) {
     return r >= rows.length;
@@ -397,7 +414,7 @@
       <div class="corner" style:width="{gutter}px"></div>
       {#each columns as col, c (col.name + c)}
         {@const s = sortOf.get(col.name)}
-        <div class="th" class:num={numeric[c]} role="columnheader" style:width="{widths[c]}px" aria-sort={s ? (s.dir === "asc" ? "ascending" : "descending") : "none"}>
+        <div class="th" class:num={numeric[c]} class:flash={flash === c} role="columnheader" style:width="{widths[c]}px" aria-sort={s ? (s.dir === "asc" ? "ascending" : "descending") : "none"}>
           <button class="th-btn" disabled={!onsort} onclick={(e) => headerClick(e, col, c)} title="{col.name} ({col.typeName}){onsort ? ' — click to sort, shift-click to add' : ''}">
             <span class="name">
               {#if col.isKey}<KeyRound size={11} class="key" />{/if}
@@ -445,6 +462,7 @@
               class:default={v === undefined}
               class:edited={!inserted && isCellEdited(edits, r, col.name)}
               class:active={active?.r === r && active?.c === c}
+              class:flash={flash === c}
               onmousedown={() => {
                 active = { r, c };
                 if (!selected.has(r)) selected = new Set();
@@ -693,6 +711,30 @@
     box-shadow: inset 0 0 0 2px var(--accent), inset 0 -4px 0 var(--edited-mark);
   }
 
+  .th.flash,
+  .td.flash {
+    animation: column-flash 1.6s ease-out;
+  }
+  .th.flash {
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  @keyframes column-flash {
+    0%,
+    35% {
+      background-color: var(--accent-soft);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .th.flash,
+    .td.flash {
+      animation: none;
+      background-color: var(--accent-soft);
+    }
+  }
+
   .editor {
     position: absolute;
     z-index: 5;
@@ -705,11 +747,10 @@
     box-shadow: var(--shadow-pop);
   }
 
+  /* Sticky so the message stays in view when the grid is scrolled sideways. */
   .empty {
-    position: absolute;
-    top: 42px;
+    position: sticky;
     left: 0;
-    right: 0;
     padding: 28px;
     text-align: center;
     color: var(--muted);

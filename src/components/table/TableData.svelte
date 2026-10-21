@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ask } from "@tauri-apps/plugin-dialog";
-  import { untrack } from "svelte";
-  import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileUp, Lock, Plus, RefreshCw, Search, Trash2, X } from "@lucide/svelte";
+  import { tick, untrack } from "svelte";
+  import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, FileUp, Lock, Plus, RefreshCw, Search, Trash2, X } from "@lucide/svelte";
   import { api, errorMessage } from "../../lib/api";
   import { connections } from "../../lib/state/connections.svelte";
   import { schema } from "../../lib/state/schema.svelte";
@@ -19,8 +19,10 @@
     toRowChanges,
     type PendingEdits,
   } from "../../lib/util/edits";
+  import { findColumns } from "../../lib/util/columns";
   import { plural } from "../../lib/util/format";
   import { equalsPredicate } from "../../lib/util/sql";
+  import ColumnJump from "../grid/ColumnJump.svelte";
   import DataGrid, { type GridColumn } from "../grid/DataGrid.svelte";
   import ExportButton from "../grid/ExportButton.svelte";
   import ChangePreview from "./ChangePreview.svelte";
@@ -56,6 +58,9 @@
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let preview = $state<string[] | null>(null);
   let saving = $state(false);
+  let grid = $state<ReturnType<typeof DataGrid>>();
+  let jump = $state<ReturnType<typeof ColumnJump>>();
+  let searchInput = $state<HTMLInputElement>();
 
   const profile = $derived(connections.byId(connId));
   const limit = $derived(settings.value.pageSize);
@@ -76,6 +81,20 @@
       return { name: c.name, typeName: meta?.dataType ?? c.typeName, isKey: meta?.isPrimaryKey };
     }),
   );
+
+  // People often type a column name into the row search; offer to jump to it.
+  const columnHit = $derived.by(() => {
+    if (!search) return null;
+    const m = findColumns(gridColumns.map((c) => c.name), search)[0];
+    return m ? gridColumns[m.index].name : null;
+  });
+
+  async function jumpFromSearch(name: string) {
+    searchDraft = "";
+    await applyFilter();
+    await tick();
+    grid?.revealColumn(gridColumns.findIndex((c) => c.name === name));
+  }
 
   function query(extra: Partial<TableQuery> = {}): TableQuery {
     return {
@@ -295,6 +314,15 @@
       e.preventDefault();
       void reload();
     }
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "j") {
+      e.preventDefault();
+      jump?.open();
+    }
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+    }
   }
 
   const rowCount = $derived(result?.rows.length ?? 0);
@@ -324,13 +352,24 @@
         class="field"
         placeholder="Search all columns"
         bind:value={searchDraft}
+        bind:this={searchInput}
         oninput={onSearchInput}
         onkeydown={(e) => e.key === "Enter" && applyFilter()}
         aria-label="Search all columns"
+        title="Find rows containing this text in any column (⌘F)"
       />
     </label>
+    <ColumnJump bind:this={jump} shortcut="⌘J" columns={gridColumns} onpick={(c) => grid?.revealColumn(c)} />
     <button class="btn small icon ghost" onclick={() => reload()} title="Refresh (⌘R)" aria-label="Refresh"><RefreshCw size={14} class={loading ? "spin" : ""} /></button>
   </div>
+
+  {#if columnHit}
+    <div class="column-hint" role="status">
+      <Columns3 size={13} />
+      <span>{rowCount === 0 ? `No rows contain “${search}”, but` : `“${search}” also matches`} a column name.</span>
+      <button class="btn small" onclick={() => columnHit && jumpFromSearch(columnHit)}>Jump to {columnHit}</button>
+    </div>
+  {/if}
 
   <div class="grid-wrap">
     {#if error}
@@ -341,6 +380,7 @@
       </div>
     {:else if result}
       <DataGrid
+        bind:this={grid}
         columns={gridColumns}
         rows={result.rows}
         rowOffset={offset}
@@ -412,7 +452,7 @@
     flex: 1;
     display: flex;
     align-items: center;
-    min-width: 0;
+    min-width: 140px;
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-m);
     background: var(--surface);
@@ -442,7 +482,8 @@
     position: relative;
     display: flex;
     align-items: center;
-    width: 220px;
+    flex: 0 1 220px;
+    min-width: 120px;
   }
   .search :global(svg) {
     position: absolute;
@@ -452,6 +493,20 @@
   .search .field {
     width: 100%;
     padding-left: 27px;
+  }
+  .column-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-size: var(--text-sm);
+  }
+  .column-hint :global(svg) {
+    flex: none;
+    color: var(--accent);
   }
   .grid-wrap {
     flex: 1;
@@ -482,6 +537,18 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+  }
+  /* In a narrow window the left side gives way; the pager on the right stays whole. */
+  .left {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+  .right {
+    flex: none;
+  }
+  .footer :global(.btn) {
+    flex: none;
+    white-space: nowrap;
   }
   .locked {
     display: inline-flex;
