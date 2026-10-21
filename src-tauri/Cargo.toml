@@ -1,0 +1,57 @@
+[package]
+name = "dbku"
+version = "0.1.0"
+description = "dbKu — a lightweight, open-source database client"
+authors = ["dbKu contributors"]
+license = "MIT"
+repository = "https://github.com/mhrdwan/dbku"
+edition = "2021"
+rust-version = "1.85"
+
+[lib]
+# The `_lib` suffix avoids a name clash between the lib and bin targets on Windows.
+name = "dbku_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+csv = "1"
+tokio = { version = "1", features = ["sync", "macros", "net", "time", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures-util = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+uuid = { version = "1", features = ["v4"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "tls-rustls",
+  "postgres",
+  "mysql",
+  "sqlite",
+] }
+# SQL Server. Uses the OS TLS stack (native-tls) and a small vendored patch
+# that can allow TLS 1.0 for old servers; see vendor/tiberius/DBKU_PATCH.md.
+tiberius = { version = "0.12", default-features = false, features = ["tds73", "vendored-openssl", "chrono"] }
+
+[dev-dependencies]
+tempfile = "3"
+tauri = { version = "2", features = ["test"] }
+
+# https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[patch.crates-io]
+tiberius = { path = "vendor/tiberius" }

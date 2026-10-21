@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: dbku
+          POSTGRES_DB: dbku_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: dbku
+          MYSQL_DATABASE: dbku_test
+        ports: ["3306:3306"]
+        options: --health-cmd "mysqladmin ping -pdbku" --health-interval 5s --health-retries 20
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: DbKu_Test_2026!
+        ports: ["1433:1433"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev libssl-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Placeholder frontend for tauri::generate_context!
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+      - name: Create SQL Server test database
+        run: |
+          for i in $(seq 1 30); do
+            docker exec $(docker ps -qf ancestor=mcr.microsoft.com/mssql/server:2022-latest) \
+              /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DbKu_Test_2026!' -Q "CREATE DATABASE dbku_test" && break
+            sleep 2
+          done
+      - working-directory: src-tauri
+        run: cargo fmt --check
+      - working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - working-directory: src-tauri
+        env:
+          DBKU_TEST_POSTGRES: "127.0.0.1:5432:postgres:dbku:dbku_test"
+          DBKU_TEST_MYSQL: "127.0.0.1:3306:root:dbku:dbku_test"
+          DBKU_TEST_MSSQL: "127.0.0.1:1433:sa:DbKu_Test_2026!:dbku_test"
+        run: cargo test
